@@ -152,12 +152,12 @@ acs_wide2 <- acs_wide %>%
          adult_frac = adult_pop/B01001_001E) %>%
   glimpse()
 
-acs_wide2 %>%
-  filter(GEOID %in% zip_data3$ZCTA) %>% 
-  ggplot() +
-  geom_sf(aes(fill=adult_frac,col=adult_frac)) +
-  scale_fill_viridis_c() + 
-  scale_color_viridis_c()
+## acs_wide2 %>%
+##   filter(GEOID %in% zip_data3$ZCTA) %>% 
+##   ggplot() +
+##   geom_sf(aes(fill=adult_frac,col=adult_frac)) +
+##   scale_fill_viridis_c() + 
+##   scale_color_viridis_c()
 
 ###############################################################################
                                         #        Join ACS and vax data        #
@@ -175,7 +175,15 @@ vax <- acs_wide2 %>%
             by = c("GEOID" = "GEOID10")) %>%
   glimpse()
 
+## Certain places have coverage >1...
+vax %>% filter(coverage > 1)
 vax %>% filter(PO_NAME == "Houston") %>% filter(coverage > 1)
+
+###############################################################################
+                                        #                 Plot                #
+###############################################################################
+
+## Make some plots
 
 myplot <- vax %>%
   ## filter(county == "Harris") %>% 
@@ -213,6 +221,10 @@ myplot2 <- vax %>%
 
 ## myplot2
 
+###############################################################################
+                                        #           Export ZIP data           #
+###############################################################################
+
 ## Export certain columns
 vax_small <- vax %>%
   mutate(state_average = state_average) %>% 
@@ -237,11 +249,11 @@ write_csv(vax_small, sprintf("map_data/%s zip_data_processed.csv", today()))
 
 
 ## Leaflet map
-library(mapview)
+## library(mapview)
 
-vax_small2 <- vax_small %>% filter(PO_NAME == "Austin") %>%
-  mutate(coverage_one_dose = round(coverage_one_dose * 100, 0))
+## vax_small2 <- vax_small %>% filter(PO_NAME == "Austin") %>%
+##   mutate(coverage_one_dose = round(coverage_one_dose * 100, 0))
 
-mapview::mapview(vax_small2, zcol = "coverage_one_dose", at = seq(0, 70, by=10))
+## mapview::mapview(vax_small2, zcol = "coverage_one_dose", at = seq(0, 70, by=10))
 
 
