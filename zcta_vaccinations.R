@@ -115,7 +115,7 @@ acs_vars %>% glimpse()
 
 acs_vars %>% distinct(concept)
 
-## write_csv(acs_vars, "acsvars.csv")
+write_csv(acs_vars, "acs2019_variables.csv")
 
 ## Population data by age
 myvars <- c(
