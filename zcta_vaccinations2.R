@@ -252,26 +252,42 @@ myplot3 <- vax %>%
   ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
   guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
 
-## myplot4 <- vax_sub %>%
-##   ## filter(county == "Harris") %>% 
-##   ## filter(PO_NAME == "Houston") %>%
-##   filter(PO_NAME == "Austin") %>%
-##   ## filter(coverage<1) %>%
-##   ## filter(GEOID %in% myzips) %>% 
-##   ## filter(coverage!=max(coverage)) %>%
-##   glimpse() %>% 
-##   ggplot() +
-##   geom_sf(aes(fill=coverage), size=0.1) +
-##   ## scale_fill_viridis_c() + 
-##   ## scale_color_viridis_c() +
-##   scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
-##                        ## , low="firebrick3",high = "dodgerblue3"
-##                        ) + 
-##   NULL +
-##   labs(title = "Vaccine coverage in Austin",
-##        subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
-##   ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
-##   guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
+## Add water and 
+
+source("zcta_features.R")
+
+myplot4 <- vax_sub %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=coverage), size=0.1) +
+  geom_sf(data = travis_roads1,
+          col = "grey30") +
+  geom_sf(data = travis_water3 %>%
+            filter(name %>% str_detect("Lake") |
+                   name %>% str_detect("River")) ## %>% 
+            ## mutate(Area = st_area(geometry) %>% as.numeric()) %>%
+            ## filter(Area > 1)
+         ,
+          aes(geometry = geometry2),
+          fill = "lightblue", size = 0.1, col="lightblue") + 
+  ## scale_fill_viridis_c() + 
+  ## scale_color_viridis_c() +
+  scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
+                       ## , low="firebrick3",high = "dodgerblue3"
+                       ) + 
+  NULL +
+  labs(title = "Vaccine coverage in Austin",
+       subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
+  ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
+
+myplot4
 
 ###############################################################################
                                         #           Export ZIP data           #
