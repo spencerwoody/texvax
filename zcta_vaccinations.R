@@ -195,13 +195,22 @@ myplot <- vax %>%
   glimpse() %>% 
   ggplot() +
   geom_sf(aes(fill=coverage), size=0.1) +
-  scale_fill_viridis_c() + 
-  scale_color_viridis_c() +
+  scale_fill_viridis_c("", labels=scales::percent) + 
+  ## scale_color_viridis_c() +
   ## scale_fill_gradient2(midpoint=state_average) +
-  labs(title = "Viridis") + 
+  labs(title = "Vaccine coverage in Austin",
+       subtitle = "Percentage of adult population with at least one dose") +
+  guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) + 
   NULL
 
 ## myplot
+
+mydf <- vax %>%
+  filter(PO_NAME == "Austin") %>%
+  summarize(adult_pop = sum(adult_pop),
+            one_dose = sum(one_dose)) %>%
+  mutate(coverage = one_dose / adult_pop) %>%
+  glimpse()
 
 myplot2 <- vax %>%
   ## filter(county == "Harris") %>% 
@@ -220,6 +229,27 @@ myplot2 <- vax %>%
   labs(title = "Relative to state-average (white)")
 
 ## myplot2
+
+myplot3 <- vax %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=coverage), size=0.1) +
+  ## scale_fill_viridis_c() + 
+  ## scale_color_viridis_c() +
+  scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
+                       ## , low="firebrick3",high = "dodgerblue3"
+                       ) + 
+  NULL +
+  labs(title = "Vaccine coverage in Austin",
+       subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
+  ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
+  guides(fill = guide_coloursteps(barwidth = 0.5, barheight = 10))
 
 ###############################################################################
                                         #           Export ZIP data           #
