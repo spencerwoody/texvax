@@ -332,9 +332,9 @@ myscatter <- vax_sub2 %>%
 
 myscatter
 
-ggsave("figures/austin/png/vaccine_svi_scatter.png", myscatter,
+ggsave(sprintf("figures/austin/png/%s-vaccine_svi_scatter.png", today()), myscatter,
        width=6.5, height = 6.25, units = "in")
-ggsave("figures/austin/pdf/vaccine_svi_scatter.pdf", myscatter,
+ggsave(sprintf("figures/austin/pdf/%s-vaccine_svi_scatter.pdf", today()), myscatter,
        width=6.5, height = 6.25, units = "in")
 
 myplot2 <- vax %>%
@@ -425,9 +425,9 @@ myplot3_both <- plot_grid(myplot3, myplot3_svi, align="hv")
 
 myplot3_both
 
-ggsave("figures/austin/png/vaccine_coverage_svi_maps.png", myplot3_both,
+ggsave(sprintf("figures/austin/png/%s-vaccine_coverage_svi_maps.png", today()), myplot3_both,
        width = 11, height = 6.1, units="in")
-ggsave("figures/austin/pdf/vaccine_coverage_svi_maps.pdf", myplot3_both,
+ggsave(sprintf("figures/austin/pdf/%s-vaccine_coverage_svi_maps.pdf", today()), myplot3_both,
        width = 11, height = 6.1, units="in")
 
 
