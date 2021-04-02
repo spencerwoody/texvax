@@ -38,6 +38,20 @@ zip_walk2 <- zip_walk %>%
   distinct(GEOID10, county_fips, PO_NAME, STATE) %>%
   left_join(msa_fips, by = c("county_fips" = "fips"))
 
+## SVI
+svi <- read_csv("census/svi_per_zip_TX.csv") %>%
+  mutate(ZIP = as.character(ZIP))
+
+glimpse(svi)
+
+svi2 <- svi %>%
+  rename(ZIP_CODE = ZIP) 
+
+zz2 <- zz %>%
+  left_join(svi2 %>%
+            select(ZIP_CODE, SVI)) %>%
+  filter(!is.na(SVI))
+
 ###############################################################################
                                         #   State- and county-level vax data  #
 ###############################################################################
@@ -46,6 +60,10 @@ state_files_full <- dir("data", full.names = TRUE)
 
 mystatefile <- state_files_full[length(state_files_full)]
 mystatefile
+
+file_date <- mystatefile %>% str_sub(6, 15) %>% ymd()
+
+as_of <- lubridate::stamp("Mar 1, 2021")(file_date)
 
 state_data <- read_xlsx(mystatefile, sheet = "By County")
 state_data[1, ] %>% as.data.frame()
@@ -92,7 +110,8 @@ zip_data <- zip_data %>%
 
 ## Add in the ZCTA (joined by residential ZIP)
 zip_data2 <- zip_data %>%
-  left_join(zz)
+  left_join(zz) %>%
+  glimpse()
 
 ## Sum vax data across ZCTAs
 zip_data3 <- zip_data2 %>%
@@ -105,6 +124,18 @@ zip_data3 <- zip_data2 %>%
     fully_vaccinated = sum(fully_vaccinated, na.rm=T)
   ) %>%
   glimpse()
+
+## Sum vax data across ZCTAs
+## zip_data3 <- zip_data2 %>%
+##   ## glimpse() %>% 
+##   filter(!is.na(ZCTA)) %>%
+##   group_by(ZCTA, SVI) %>%
+##   summarize(
+##     doses_administered = sum(doses_administered, na.rm=T),
+##     one_dose = sum(one_dose, na.rm=T),
+##     fully_vaccinated = sum(fully_vaccinated, na.rm=T)
+##   ) %>%
+##   glimpse()
 
 ###############################################################################
                                         #          Pull the ACS data          #
@@ -128,7 +159,8 @@ myvars <- c(
   "B01001_027",
   "B01001_028",
   "B01001_029",
-  "B01001_030")
+  "B01001_030",
+  "B01002_001")
 
 acs_vars %>% filter(name %in% myvars)
 
@@ -148,7 +180,7 @@ mean(zip_data3$ZCTA %in% acs_wide$GEOID)
 
 ## Sum up under-18 population
 acs_wide2 <- acs_wide %>%
-  mutate(under18 = rowSums(across(contains(myvars[-1]) & !contains("M"))),
+  mutate(under18 = rowSums(across(contains(myvars[-1]) & !contains("M") & !contains("B01002"))),
          adult_pop = B01001_001E - under18,
          adult_frac = adult_pop/B01001_001E) %>%
   glimpse()
@@ -167,6 +199,7 @@ acs_wide2 <- acs_wide %>%
 ## Join 
 vax <- acs_wide2 %>%
   left_join(zip_data3, by = c("GEOID" = "ZCTA")) %>%
+  left_join(zz2 %>% select(ZCTA, SVI), by = c("GEOID" = "ZCTA")) %>%
   filter(adult_pop > 0) %>% 
   mutate(coverage = one_dose / (adult_pop+1)) %>% 
   left_join(zip_walk2 %>%
@@ -176,102 +209,13 @@ vax <- acs_wide2 %>%
             by = c("GEOID" = "GEOID10")) %>%
   glimpse()
 
-## Certain places have coverage >1...
-vax %>% filter(coverage > 1)
+## Certain places have coverage >1, mostly because of small adult
+## populations...
+vax %>% filter(coverage > 1) %>% arrange(adult_pop)
+
+## 77030 is the ZIP code for the Texas Medical Center in Houston
+## See: https://goo.gl/maps/Us7pcbRVC13n6PjJA
 vax %>% filter(PO_NAME == "Houston") %>% filter(coverage > 1)
-
-###############################################################################
-                                        #                 Plot                #
-###############################################################################
-
-## Make some plots
-
-myplot <- vax %>%
-  ## filter(county == "Harris") %>% 
-  ## filter(PO_NAME == "Houston") %>%
-  filter(PO_NAME == "Austin") %>%
-  ## filter(coverage<1) %>%
-  ## filter(GEOID %in% myzips) %>% 
-  ## filter(coverage!=max(coverage)) %>%
-  glimpse() %>% 
-  ggplot() +
-  geom_sf(aes(fill=coverage), size=0.1) +
-  scale_fill_viridis_c("", labels=scales::percent) + 
-  ## scale_color_viridis_c() +
-  ## scale_fill_gradient2(midpoint=state_average) +
-  labs(title = "Vaccine coverage in Austin",
-       subtitle = "Percentage of adult population with at least one dose") +
-  guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) + 
-  NULL
-
-## myplot
-
-mydf <- vax %>%
-  filter(PO_NAME == "Austin") %>%
-  summarize(adult_pop = sum(adult_pop),
-            one_dose = sum(one_dose)) %>%
-  mutate(coverage = one_dose / adult_pop) %>%
-  glimpse()
-
-myplot2 <- vax %>%
-  ## filter(county == "Harris") %>% 
-  ## filter(PO_NAME == "Houston") %>%
-  filter(PO_NAME == "Austin") %>%
-  ## filter(coverage<1) %>%
-  ## filter(GEOID %in% myzips) %>% 
-  ## filter(coverage!=max(coverage)) %>%
-  glimpse() %>% 
-  ggplot() +
-  geom_sf(aes(fill=coverage), size=0.1) +
-  ## scale_fill_viridis_c() + 
-  ## scale_color_viridis_c() +
-  scale_fill_gradient2(midpoint=state_average) + 
-  NULL +
-  labs(title = "Relative to state-average (white)")
-
-## myplot2
-
-myplot3 <- vax %>%
-  ## filter(county == "Harris") %>% 
-  ## filter(PO_NAME == "Houston") %>%
-  filter(PO_NAME == "Austin") %>%
-  ## filter(coverage<1) %>%
-  ## filter(GEOID %in% myzips) %>% 
-  ## filter(coverage!=max(coverage)) %>%
-  glimpse() %>% 
-  ggplot() +
-  geom_sf(aes(fill=coverage), size=0.1) +
-  ## scale_fill_viridis_c() + 
-  ## scale_color_viridis_c() +
-  scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
-                       ## , low="firebrick3",high = "dodgerblue3"
-                       ) + 
-  NULL +
-  labs(title = "Vaccine coverage in Austin",
-       subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
-  ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
-  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
-
-## myplot4 <- vax_sub %>%
-##   ## filter(county == "Harris") %>% 
-##   ## filter(PO_NAME == "Houston") %>%
-##   filter(PO_NAME == "Austin") %>%
-##   ## filter(coverage<1) %>%
-##   ## filter(GEOID %in% myzips) %>% 
-##   ## filter(coverage!=max(coverage)) %>%
-##   glimpse() %>% 
-##   ggplot() +
-##   geom_sf(aes(fill=coverage), size=0.1) +
-##   ## scale_fill_viridis_c() + 
-##   ## scale_color_viridis_c() +
-##   scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
-##                        ## , low="firebrick3",high = "dodgerblue3"
-##                        ) + 
-##   NULL +
-##   labs(title = "Vaccine coverage in Austin",
-##        subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
-##   ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
-##   guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
 
 ###############################################################################
                                         #           Export ZIP data           #
@@ -297,6 +241,219 @@ vax_small <- vax %>%
 glimpse(vax_small)
 
 write_csv(vax_small, sprintf("map_data/%s zip_data_processed.csv", today()))
+
+###############################################################################
+                                        #        Make plots for Austin        #
+###############################################################################
+
+## Make some plots
+
+myplot <- vax %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=coverage), size=0.1) +
+  scale_fill_viridis_c("", labels=scales::percent) + 
+  ## scale_color_viridis_c() +
+  ## scale_fill_gradient2(midpoint=state_average) +
+  labs(title = "Vaccine coverage in Austin",
+       subtitle = "Percentage of adult population with at least one dose") +
+  guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) + 
+  NULL
+
+myplot_svi <- vax %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=SVI), size=0.1) +
+  scale_fill_viridis_c("SVI"## , labels=scales::percent
+                       ) + 
+  ## scale_color_viridis_c() +
+  ## scale_fill_gradient2(midpoint=state_average) +
+  labs(title = "Vaccine coverage in Austin",
+       subtitle = "Percentage of adult population with at least one dose") +
+  guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) + 
+  NULL
+
+## myplot_svi
+
+mydf <- vax %>%
+  filter(PO_NAME == "Austin") %>%
+  summarize(SVI = mean(SVI),
+            adult_pop = sum(adult_pop),
+            one_dose = sum(one_dose)) %>%
+  mutate(coverage = one_dose / adult_pop) %>%
+  glimpse()
+
+vax_sub <- vax %>%
+  filter(PO_NAME == "Austin")
+
+vax_sub %>% arrange(SVI) %>% select(GEOID, adult_pop, SVI, coverage)
+vax_sub %>% arrange(coverage) %>% select(GEOID, adult_pop, SVI, coverage)
+
+burden <- read_csv("census/zip_risk_grouping.csv") %>%
+  rename(GEOID = ZIP, burden = grouping) %>%
+  mutate(GEOID = as.character(GEOID)) %>% 
+  glimpse()
+
+vax_sub2 <- vax_sub %>%
+  left_join(burden)
+
+vax_sub2 %>%
+  filter(coverage>0.2) %>% 
+  group_by(burden) %>%
+  summarize(coverage_mean_adult = sum(one_dose)/sum(adult_pop),
+            coverage_mean_total = sum(one_dose)/sum(B01001_001E))
+
+myscatter <- vax_sub2 %>%
+  ggplot() +
+  geom_smooth(aes(SVI, coverage)) +
+  geom_point(aes(SVI, coverage## , col=B01002_001E
+                 ## , col = burden
+                 ),
+             size = 2.5, alpha=0.5
+             ) +
+  ## scale_color_distiller(palette = "Spectral") +
+  scale_color_viridis_c("Median age", option="C") +
+  scale_y_continuous(labels=scales::percent) + 
+  labs(title = "Vaccine coverage vs. social vulnerability in Austin", 
+       y = "Vaccine coverage (% of adult population with at >=1 dose)",
+       x = "Social vulnerability index (SVI; higher is more vulnerable)") 
+
+myscatter
+
+ggsave("figures/austin/png/vaccine_svi_scatter.png", myscatter,
+       width=6.5, height = 6.25, units = "in")
+ggsave("figures/austin/pdf/vaccine_svi_scatter.pdf", myscatter,
+       width=6.5, height = 6.25, units = "in")
+
+myplot2 <- vax %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=coverage), size=0.1) +
+  ## scale_fill_viridis_c() + 
+  ## scale_color_viridis_c() +
+  scale_fill_gradient2(midpoint=state_average) + 
+  NULL +
+  labs(title = "Relative to state-average (white)")
+
+## myplot2
+
+myplot3 <- vax_sub2 %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=coverage## , col=burden
+              ), size=0.1) +
+    geom_sf(data = travis_roads1,
+          col = "grey30") + 
+  ## scale_fill_viridis_c() + 
+  ## scale_color_viridis_c() +
+  scale_fill_gradient2(sprintf("Vaccine coverage\n(%% of adult pop. with ≥1 dose)\ncity-average = %2.1f%%", mydf$coverage * 100), midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
+                       ## , low="firebrick3",high = "dodgerblue3"
+                       ) + 
+  NULL +
+  ## labs(title = "Vaccine coverage in Austin",
+  ##      subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
+  ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
+  labs(caption=sprintf("Up to %s\nSource: Texas DSHS", as_of))+
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 12, barheight = 0.5)) +
+  theme_cowplot() + 
+  theme(legend.position = "top")
+
+myplot3
+
+myplot3_svi <- vax_sub2 %>%
+  ## filter(county == "Harris") %>% 
+  ## filter(PO_NAME == "Houston") %>%
+  filter(PO_NAME == "Austin") %>%
+  ## filter(coverage<1) %>%
+  ## filter(GEOID %in% myzips) %>% 
+  ## filter(coverage!=max(coverage)) %>%
+  glimpse() %>% 
+  ggplot() +
+  geom_sf(aes(fill=SVI), size=0.1) +
+  geom_sf(data = travis_roads1,
+          col = "grey30") +
+  ## geom_sf(data = travis_water3 %>%
+  ##           filter(name %>% str_detect("Lake") |
+  ##                  name %>% str_detect("River")) ## %>% 
+  ##           ## mutate(Area = st_area(geometry) %>% as.numeric()) %>%
+  ##           ## filter(Area > 1)
+  ##        ,
+  ##         aes(geometry = geometry2),
+  ##         fill = "lightblue", size = 0.1, col="lightblue")+
+  ## scale_fill_viridis_c() + 
+  ## scale_color_viridis_c() +
+  scale_fill_gradient2(sprintf("Social vulnerability index\n(higher is more vulnerable)\ncity average = %1.2f", mydf$SVI), midpoint=mydf$SVI,## , mid="grey90"
+                       ## , low="firebrick3",high = "dodgerblue3"
+                       high="darkgreen", low="darkviolet", mid="grey95") + 
+  NULL +
+  labs(## title = "Social vulnerability index in Austin",
+    ## subtitle = sprintf("SVI by ZIP code\nRelative to city-average (%2.2f; higher is more vulnerable)", mydf$SVI)
+  ) +
+  ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
+  labs("\n") + 
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 12, barheight = 0.5)) +
+  theme_cowplot() + 
+  theme(legend.position = "top")
+
+myplot3_svi
+
+myplot3_both <- plot_grid(myplot3, myplot3_svi, align="hv")
+
+myplot3_both
+
+ggsave("figures/austin/png/vaccine_coverage_svi_maps.png", myplot3_both,
+       width = 11, height = 6.1, units="in")
+ggsave("figures/austin/pdf/vaccine_coverage_svi_maps.pdf", myplot3_both,
+       width = 11, height = 6.1, units="in")
+
+
+
+## myplot4 <- vax_sub %>%
+##   ## filter(county == "Harris") %>% 
+##   ## filter(PO_NAME == "Houston") %>%
+##   filter(PO_NAME == "Austin") %>%
+##   ## filter(coverage<1) %>%
+##   ## filter(GEOID %in% myzips) %>% 
+##   ## filter(coverage!=max(coverage)) %>%
+##   glimpse() %>% 
+##   ggplot() +
+##   geom_sf(aes(fill=coverage), size=0.1) +
+##   ## scale_fill_viridis_c() + 
+##   ## scale_color_viridis_c() +
+##   scale_fill_gradient2("", midpoint=mydf$coverage, labels=scales::percent## , mid="grey90"
+##                        ## , low="firebrick3",high = "dodgerblue3"
+##                        ) + 
+##   NULL +
+##   labs(title = "Vaccine coverage in Austin",
+##        subtitle = sprintf("Percentage of adult population with at least one dose\nRelative to city-average (%2.1f%%)", mydf$coverage * 100)) +
+##   ## guides(fill = guide_colourbar(barwidth = 0.5, barheight = 10)) +
+##   guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 0.5, barheight = 10))
+
+
 
 
 
