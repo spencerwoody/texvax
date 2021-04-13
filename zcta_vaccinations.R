@@ -383,7 +383,7 @@ get_vector_tiles <- function(bbox){
   mz_vector_tiles(mz_box)
 }
 
-zip_geom <- vax_sub2
+zip_geom <- vax %>% filter(PO_NAME == "Austin")
 zcta_geom <- st_union(zip_geom$geometry)
 
 load("census/roads.Rdata")
