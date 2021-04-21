@@ -33,10 +33,20 @@ zip_walk <- read_csv("census/ZCTA_CBG_MASTER_9_25_2020.csv") %>%
 zz <- zip_walk %>% select(ZCTA = GEOID10, ZIP_CODE) %>% distinct()
 
 ## ZIP (residential) -> tract
-zt <- zip_walk %>% select(FIPS = tract_fips, ZIP_CODE) %>% distinct()
+## zt <- zip_walk %>% select(FIPS = tract_fips, ZIP_CODE) %>% distinct()
+
+zt <- read_csv("census/zcta_tract_rel_10.txt")
+
+zt <- zt %>%
+  mutate(STATE = as.character(STATE)) %>%
+  mutate(GEOID = as.character(GEOID))## make sure to pad this out...
+
+glimpse(zt)
 
 ## Tract -> ZCTA
 tz <- zip_walk %>% select(FIPS = tract_fips, ZCTA = GEOID10) %>% distinct()
+
+
 
 ## ZCTA <- county
 county <- read_csv("census/counties_basicdata.csv") %>% glimpse()
@@ -77,6 +87,8 @@ txsvi <- read_csv("census/Texas-SVI.csv") %>%
                                         #    Create SVI data for ZCTA level   #
 ###############################################################################
 
+
+
 tr <- txsvi %>%
   ## filter(COUNTY=="Travis") %>%
   select(ST, STATE, ST_ABBR, STCNTY, COUNTY, FIPS, LOCATION,
@@ -86,8 +98,11 @@ tr <- txsvi %>%
          ) %>%
   glimpse()
   
+## trz <- tr %>%
+##   left_join(tz)
+
 trz <- tr %>%
-  left_join(tz)
+  left_join(zt %>% select(ZCTA = ZCTA5, FIPS = GEOID))
 
 sum(is.na(trz$ZCTA))
 
@@ -106,7 +121,8 @@ glimpse(trz)
 ##             RPL_THEME1 = weighted.mean(RPL_THEME1),
 ##             RPL_THEME2 = sum(RPL_THEME2 * popweight),)
 
-trz_weights <- trz_summary <- trz %>%
+trz_weights <- trz %>%
+  filter(RPL_THEMES > 0) %>%
   group_by(ZCTA) %>%
   summarize(n = n(),
             pop = sum(E_TOTPOP),
@@ -114,17 +130,36 @@ trz_weights <- trz_summary <- trz %>%
   glimpse()
 
 trz_summary <- trz %>%
+  filter(RPL_THEMES > 0) %>%
   filter(!is.na(ZCTA)) %>% 
   left_join(trz_weights) %>%
   ## glimpse() %>% 
   group_by(COUNTY, ZCTA) %>%
   summarize(across(where(is.numeric), ~ weighted.mean(.x, w = popweight)))
 
+trz_summary2 <- trz %>%
+  filter(RPL_THEMES > 0) %>%
+  filter(!is.na(ZCTA)) %>% 
+  left_join(trz_weights) %>%
+  ## glimpse() %>% 
+  group_by(ZCTA) %>%
+  summarize(COUNTY =names (which.max(table(COUNTY))),
+            ZCTA_POP = sum(E_TOTPOP),
+            AREA = sum(AREA_SQMI),
+            across(where(is.numeric), ~ weighted.mean(.x, w = popweight)))
+
+glimpse(trz_summary2)
+
+nrow(trz_summary)
+nrow(trz_summary2)
+
   
 
 trz_summary %>% filter(ZCTA == "78725")
 trz_summary %>% filter(ZCTA == "78660")
-  
+
+trz_summary2 %>% filter(ZCTA == "78725")
+trz_summary2 %>% filter(ZCTA == "78660")
 
 trz_summary %>% apply(2, function(x) sum(is.na(x)))
 
@@ -142,8 +177,58 @@ travis_zips <- trz %>% filter(COUNTY=="Travis") %>% distinct(COUNTY, ZCTA) %>% p
 
 
 acs_wide <- get_acs(geography = "zcta", variables = "B01001_001",
-                    state = "TX", geometry = TRUE, cb=F)
+                    state = "TX", geometry = TRUE)
+
+acs_wide18 <- get_acs(geography = "zcta", variables = "B01001_001",
+                      year=2018
+                      ## county="Travis",
+                    ## state = "TX"## , geometry = TRUE
+                    )
+
+## acs_wide <- get_acs(geography = c("zcta", "county"), variables = "B01001_001",
+##                     state = "TX", geometry = TRUE)
 
 acs_wide %>% glimpse()
+
+trz_summary2  %>% glimpse()
+
+acs_wide %>%
+  left_join(trz_summary2, by = c("GEOID" = "ZCTA")) %>%
+  ## filter(RPL_THEMES < 0) %>%
+  ## filter(RPL_THEMES > 0) %>%
+  filter(COUNTY=="Travis") %>% 
+  ## filter(!(GEOID %in% trz_summary$ZCTA)) %>%
+  ggplot() +
+  ## geom_sf(aes(fill = log(estimate))) +
+  geom_sf(aes(fill = RPL_THEMES)) +
+  scale_fill_viridis_c()
+
+trz_summary2 %>%
+  select(-n, -pop, -popweight, -AREA_SQMI, -contains("_TOTPOP")) %>%
+  glimpse() %>% 
+  write_csv("census/zcta-svi-woody.csv")
+
+acs_wide %>%
+  left_join(trz_summary2, by = c("GEOID" = "ZCTA")) %>%
+  ## filter(RPL_THEMES < 0) %>%
+  ## filter(RPL_THEMES > 0) %>%
+  filter(COUNTY=="Harris") %>% 
+  ## filter(!(GEOID %in% trz_summary$ZCTA)) %>%
+  ggplot() +
+  ## geom_sf(aes(fill = log(estimate))) +
+  geom_sf(aes(fill = RPL_THEMES)) +
+  scale_fill_viridis_c()
+
+acs_wide %>%
+  left_join(trz_summary2, by = c("GEOID" = "ZCTA")) %>%
+  filter(RPL_THEMES < 0) %>%
+  filter(COUNTY=="Travis") %>% 
+  glimpse()
+
+acs_wide %>%
+  filter(!(GEOID %in% trz_summary$ZCTA)) %>%
+  pull(estimate)
+
+acs_wide$estimate %>% summary()
 
 trz_summary$ZCTA %>% length()
