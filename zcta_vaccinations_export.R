@@ -81,6 +81,8 @@ zip_df <- zip_df %>%
 
 glimpse(zip_df)
 
+## Most recent data
+zip_df_latest <- zip_df %>% filter(date == max(date))
 
 ###############################################################################
                                         #             Get ACS data            #
@@ -185,6 +187,7 @@ vax_all <- zip_df %>%
   left_join(zzsvi) %>%
   ## left_join(vote) %>% 
   mutate(coverage = one_dose / (adult_pop+1),
+         coverage_total_pop = one_dose / (total_pop+1),
          coverage_under18 = one_dose / (B01001_001E - under18 +1)) %>%
   left_join(zc_walk %>%
             select(-ZPOPPCT, -area_name)) %>% 
@@ -217,6 +220,7 @@ io <- vax_all %>%
          one_dose,
          fully_vaccinated,
          coverage_one_dose_16plus = coverage,
+         coverage_one_dose_total_pop = coverage_total_pop,
          ## dem_share_2party_pres_vote,
          ## state_average_coverage_one_dose = state_average,
          contains("phase"),
@@ -225,8 +229,10 @@ io <- vax_all %>%
          contains("RPL"),
          geometry)
 
+io <- io %>% mutate_if(is.numeric, function(x) round(x, 4)) %>% glimpse()
+
 io %>%
   as.data.frame() %>%
   select(-geometry) %>% 
-  write_csv(sprintf("map_data/%s_zip_data_processed_extra.csv", today()))
+  write_csv(sprintf("map_data/%s_zip_data_processed.csv", today()))
 
