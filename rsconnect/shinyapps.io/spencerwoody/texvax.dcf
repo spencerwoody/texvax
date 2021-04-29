@@ -1,0 +1,13 @@
+name: texvax
+title: texvax
+username:
+account: spencerwoody
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3973127
+bundleId: 4476868
+url: https://spencerwoody.shinyapps.io/texvax/
+when: 1618515052.29309
+lastSyncTime: 1618515052.29313
+asMultiple: FALSE
+asStatic: FALSE
