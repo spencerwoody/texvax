@@ -1,0 +1,312 @@
+---
+title: "COVID-19 mortality and vaccination distribution in Austin, Texas"
+author: "Spencer Woody, UT-Austin COVID-19 Modeling Consortium"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 2400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+
+```{r include=FALSE,fig.width=6, fig.height=6, fig.align='center',message=F}
+library(ggplot2)
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+library(sf)
+library(ggiraph)
+## Diverging color scales
+mycols1 <- c("#8c510a", "#01665e", "#f5f5f5")
+mycols2 <- c("#c51b7d", "#4d9221", "#f7f7f7")
+mycols3 <- c("#b2182b", "#2166ac", "#f7f7f7")
+mycols4 <- c("#d73027", "#4575b4", "#ffffbf")
+mycols5 <- c("#b2182b", "#4d4d4d", "#ffffff")
+mycols6 <- c("#b35806", "#542788", "#f7f7f7")
+set.seed(123)
+n <- 1000
+x1  <- matrix(rnorm(n), ncol = 2)
+x2  <- matrix(rnorm(n, mean = 3, sd = 1.5), ncol = 2)
+x   <- rbind(x1, x2)
+head(x)
+smoothScatter(x, xlab = "x1", ylab = "x2")
+```
+
+
+
+```{r include=FALSE, echo=FALSE}
+theme_set(theme_half_open())
+
+load("./austin.Rdata")
+
+city_avg_deaths <- vax_sub_deaths %>%
+  mutate(infected = B01001_001E * attack_rate_mean) %>%
+  summarize(
+    SVI = mean(SVI),
+    total_pop = sum(B01001_001E),
+    total_infected = sum(infected, na.rm=TRUE),
+    infection_rate = total_infected / total_pop,
+    adult_pop = sum(adult_pop),
+    one_dose = sum(one_dose),
+    senior_frac = sum(plus65)/adult_pop,
+    nonsenior_frac=sum(adults_16_64)/adult_pop,
+    total_deaths = sum(deaths),
+    total_deaths_65plus = sum(deaths_65plus),
+    total_deaths_65under = sum(deaths_65under),
+    city_pop = sum(total_pop),
+    city_pop_65plus = sum(adults_65_plus),
+    city_pop_65under = city_pop - city_pop_65plus,
+    deaths_per_10k_avg = total_deaths/city_pop * 1e4,
+    deaths_per_10k_65plus_avg = total_deaths_65plus / city_pop_65plus * 1e4,
+    deaths_per_10k_65under_avg = total_deaths_65under / city_pop_65under * 1e4
+  ) %>%
+    mutate(coverage = one_dose / adult_pop,
+       coverage_all = one_dose / total_pop)
+
+## All deaths
+myplot3_deaths_ia <- vax_sub_deaths %>%
+  mutate(coverage = ifelse(coverage > 1, 1, coverage)) %>%
+  # glimpse() %>%
+  ggplot() +
+  geom_sf_interactive(
+    aes(fill=deaths_per_10k,
+        tooltip = ZCTA,
+        data_id = ZCTA,
+        label=ZCTA,
+        geometry=geometry## , col=burden
+        ), size=0.1) +
+  ## Roads
+  geom_sf(data = I35_2,
+          col = "grey10") +
+  geom_sf(data = missing_183_2,
+          col = "grey10") +
+  geom_sf(data = US183_2,
+          col = "grey10") +
+  annotate(geom="text", x=-97.8, y=30.55, label="US 183", size=4)+
+  annotate(geom="text", x=-97.68, y=30.55, label="I-35", size=4) +
+  scale_fill_viridis_c("deaths per\n10,000 residents",option="D"## labels=scales::label_percent()
+  ) +
+  NULL +
+  labs(title="Mortality rate\nAll ages")  +
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 14, barheight = 0.5)) +
+  theme_map() +
+  theme(legend.position = "top",
+        legend.title = element_text(face = "bold"))
+
+# myplot3_deaths_ia
+
+# save(vax_sub_deaths, file="austin.Rdata")
+
+myscatter41_ia <- vax_sub_deaths %>%
+  ggplot() +
+  geom_smooth(aes(SVI, deaths_per_10k), method="lm") +
+  geom_point_interactive(
+    aes(SVI, deaths_per_10k, 
+        # label=ZCTA,
+        tooltip = ZCTA,
+        data_id = ZCTA,
+        color=(total_pop)
+        ), size=5,alpha=0.8) +
+  scale_color_viridis_c("ZIP population",
+                        option="A",direction=-1,
+                        breaks = scales::breaks_log(6),
+                        labels=scales::label_comma()## ,
+                        ## labels = scales::label_percent(accuracy=1)
+                        ) +
+  labs(subtitle="All ages",
+       x = "SVI (higher is more vulnerable)", y = "Deaths per 10,000 residents") +
+  theme_grey(base_size=16) +
+  guides(color = guide_colorsteps(ticks=TRUE,barwidth = 15, barheight = 0.5)) +
+  theme(legend.position = "bottom",
+        axis.title = element_text(face="bold"),
+        legend.title = element_text(face="bold"))
+
+# myscatter41_ia
+
+```
+
+
+```{r include=FALSE,echo=FALSE}
+myplot3 <- vax_sub_deaths %>%
+  mutate(coverage = ifelse(coverage > 1, 1, coverage)) %>% 
+  # glimpse() %>% 
+  ggplot() +
+  geom_sf_interactive(
+    aes(fill=coverage, label=ZCTA, geometry=geometry,
+        tooltip = ZCTA,
+        data_id = ZCTA## , col=burden
+              ), size=0.1) +
+  ## Roads
+  geom_sf(data = I35_2,
+          col = "grey10") +
+  geom_sf(data = missing_183_2,
+          col = "grey10") +
+  geom_sf(data = US183_2,
+          col = "grey10") +
+  annotate(geom="text", x=-97.8, y=30.55, label="US 183", size=4)+
+  annotate(geom="text", x=-97.68, y=30.55, label="I-35", size=4) + 
+  scale_fill_steps2(    "",
+                    midpoint=round(city_avg_deaths$coverage/0.1)*0.1,## , mid="grey90"
+                    high = mycols3[2], low = mycols3[1], mid = mycols3[3],
+                    breaks=seq(0, 0.9, by=0.1),
+                    labels=scales::label_percent(accuracy=1),
+) + 
+  NULL +
+  labs(subtitle="Vaccine coverage")  +
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 15, barheight = 0.5)) +
+theme_map() +
+## theme_dark() +
+  theme(legend.position = "top",
+        legend.title = element_text(face = "bold"))
+
+myplot3_svi_mycols <- vax_sub_deaths %>%
+  mutate(coverage = ifelse(coverage > 1, 1, coverage)) %>% 
+  # glimpse() %>% 
+  ggplot() +
+  geom_sf_interactive(aes(fill=SVI, label=ZCTA, geometry=geometry,
+              tooltip = ZCTA,
+        data_id = ZCTA
+              ## , col=burden
+              ), size=0.1) +
+  ## Roads
+  geom_sf(data = I35_2,
+          col = "grey10") +
+  geom_sf(data = missing_183_2,
+          col = "grey10") +
+  geom_sf(data = US183_2,
+          col = "grey10") +
+      scale_fill_steps2(    "",
+                        midpoint=round(city_avg_deaths$SVI/0.05)*0.05,## , mid="grey90"
+                        high = mycols1[1], low = mycols1[2], mid = mycols1[3],
+                    breaks=seq(0, 0.9, by=0.1)## ,
+                    ## labels=scales::label_percent(accuracy=1),
+) + 
+  NULL +
+  labs(subtitle="Social vulnerability")  +
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 15, barheight = 0.5)) +
+  theme_map() +
+  annotate(geom="text", x=-97.8, y=30.55, label="US 183", size=4)+
+  annotate(geom="text", x=-97.68, y=30.55, label="I-35", size=4) + 
+  theme(legend.position = "top",
+        legend.title = element_text(face = "bold"))
+
+myplot3_burden <- vax_sub_deaths %>%
+  mutate(coverage = ifelse(coverage > 1, 1, coverage)) %>% 
+  # glimpse() %>% 
+  ggplot() +
+  geom_sf_interactive(aes(fill=SVI, label=attack_rate_mean, geometry=geometry,
+              tooltip = ZCTA,
+        data_id = ZCTA
+              ## , col=burden
+              ), size=0.1) +
+  ## Roads
+  geom_sf(data = I35_2,
+          col = "grey10") +
+  geom_sf(data = missing_183_2,
+          col = "grey10") +
+  geom_sf(data = US183_2,
+          col = "grey10") +
+      scale_fill_steps2(    "",
+                        midpoint=round(city_avg_deaths$infection_rate/0.1)*0.1,## , mid="grey90"
+                        high = mycols2[1], low = mycols2[2], mid = mycols2[3],
+                    breaks=seq(0.1, 0.9, by=0.1),
+                    labels=scales::label_percent(accuracy=1),
+) + 
+  NULL +
+  labs(subtitle="Cumulative infections")  +
+  guides(fill = guide_coloursteps(ticks=TRUE,barwidth = 15, barheight = 0.5)) +
+  theme_map() +
+  annotate(geom="text", x=-97.8, y=30.55, label="US 183", size=4)+
+  annotate(geom="text", x=-97.68, y=30.55, label="I-35", size=4) + 
+  theme(legend.position = "top",
+        legend.title = element_text(face = "bold"))
+
+myscatter2 <- vax_sub_deaths %>%
+  filter(coverage <= 1) %>% 
+  ## mutate(coverage = ifelse(coverage > 1, 1, coverage)) %>% 
+  ggplot() +
+  geom_smooth(aes(attack_rate_mean, coverage),method="lm") +
+  geom_point_interactive(aes(attack_rate_mean, coverage,
+                            tooltip = ZCTA,
+        data_id = ZCTA, 
+                 col = SVI## , col=B01002_001E
+                 ## , col = burden
+                 ),
+             size = 2.5## , alpha=0.5
+             ) +
+  ## scale_color_distiller(palette = "Spectral") +
+  scale_color_viridis_c("Social vulnerability",
+                        option="C") +
+  scale_y_continuous(labels=scales::percent) +
+  scale_x_continuous(labels=scales::percent) + 
+  labs(## title = "Cumulative infections, vaccine coverage, & social vulnerability in Austin", 
+       y = "Vaccine coverage",
+       x = "Cumulative infections") +
+  guides(color = guide_colorsteps(ticks=TRUE,barwidth = 12, barheight = 0.5)) +
+  theme(legend.position = "bottom")
+  ## theme_cowplot() + 
+  # theme(legend.position = "bottom",
+  #       axis.title = element_text(face="bold"),
+  #       legend.title = element_text(face="bold"))
+
+mygrid2 <- plot_grid(
+myplot3_svi_mycols, myplot3_burden, myplot3,
+      NULL , myscatter2 , NULL,
+    nrow=2)
+
+# mygrid2
+
+
+```
+
+
+
+## SVI, infection rate, and vaccine administration by ZIP code
+
+
+```{r, fig.align="center", fig.width=12, fig.height=10, fig.cap="Figure: Here is a really important caption.", echo=FALSE, message=FALSE}
+
+girafe(
+  ggobj=mygrid2,
+  # ggobj = plot_grid(
+  #   myplot3_svi_mycols, myplot3_burden, myplot3,
+  #   nrow=1),
+  width_svg = 12,
+  height_svg = 10,
+    options = list(
+    opts_hover_inv(css = "opacity:0.8;"),
+    opts_hover(css = "stroke-width:2;")
+  ))
+```
+
+## COVID-19 mortality by ZIP code
+
+```{r fig.width=12, fig.height=6, fig.align='center', echo=FALSE, message=FALSE}
+
+
+
+girafe(
+  ggobj = plot_grid(myplot3_deaths_ia, myscatter41_ia),
+  width_svg = 12,
+  height_svg = 6,
+    options = list(
+    opts_hover_inv(css = "opacity:0.8;"),
+    opts_hover(css = "stroke-width:2;")
+  ))
+  ##   options = list(
+  ##   opts_hover(css = "fill: #202020; opacity: 0.8"),
+  ##   opts_hover_inv(css = "opacity: 0.8;")
+  ## )
+
+
+```
+
