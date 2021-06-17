@@ -25,11 +25,19 @@ get_acs_zip <- function() {
 
   sr <- acs_vars %>% slice(20:25, 44:49) %>% glimpse() %>% pull(name)
 
-  acs_wide <- get_acs(geography = "zcta", variables = myvars,
-                      state = "TX", geometry = TRUE, output = "wide")
+  ## acs_wide <- get_acs(geography = "zcta", variables = myvars,
+  ##                     state = "TX", geometry = TRUE, output = "wide")
 
-  acs_wide_sr <- get_acs(geography = "zcta", variables = sr,
-                         state = "TX", geometry = TRUE, output = "wide")
+  ## acs_wide_sr <- get_acs(geography = "zcta", variables = sr,
+  ##                        state = "TX", geometry = TRUE, output = "wide")
+
+  acs_wide <- get_acs(geography = "zcta", variables = myvars,
+                      geometry = TRUE, output = "wide") %>%
+    filter(GEOID %in% zip_df_latest$ZCTA)
+
+  acs_wide_sr <- get_acs(geography = "zcta", variables = sr , geometry = TRUE,
+                         output = "wide") %>%
+    filter(GEOID %in% zip_df_latest$ZCTA)
 
   acs_wide_sr <- acs_wide_sr %>%
     mutate(plus65 = rowSums(across(contains("B") & contains("E")))) 
